@@ -17,6 +17,7 @@ import time
 import streamlit as st
 
 import absensi_store as ab
+import loading_icon
 
 st.set_page_config(page_title="Absensi OSL", page_icon="🕒", layout="centered")
 
@@ -24,8 +25,10 @@ st.markdown("""
 <style>
 :root { --osl-1:#9F2063; --osl-2:#C23B80; --osl-3:#FBF0F5; --osl-ink:#2A0F1D;
         --ok:#16A34A; --bad:#DC2626; --warn:#D97706; --line:#E2E8F0; --muted:#64748B; }
-header[data-testid="stHeader"]{display:none !important;}
-[data-testid="stToolbar"], [data-testid="stDecoration"], footer {display:none !important;}
+header[data-testid="stHeader"]{background:transparent !important;pointer-events:none;z-index:1000003 !important;}
+header[data-testid="stHeader"] *{pointer-events:none;}
+[data-testid="stToolbarActions"], [data-testid="stMainMenu"], [data-testid="stAppDeployButton"],
+[data-testid="stDecoration"], footer {display:none !important;}
 .block-container{padding-top:5rem;padding-bottom:3rem;max-width:520px;}
 /* bar atas magenta, sama dengan app OSL */
 .osl-bar{position:fixed;top:0;left:0;right:0;height:60px;z-index:1000001;background:var(--osl-1);
@@ -120,6 +123,7 @@ def _logo() -> str:
 
 
 def hero():
+    st.markdown(loading_icon.CSS, unsafe_allow_html=True)
     now = ab.now_wib()
     st.markdown(f"<div class='osl-bar'>{_logo()}<div class='t'>ONE STOP<small>LAUNDRY</small></div>"
                 "</div>", unsafe_allow_html=True)
@@ -129,9 +133,11 @@ def hero():
                 unsafe_allow_html=True)
 
 
-APP_VERSION = "1.2"
+APP_VERSION = "1.3"
 APP_UPDATED = "22 Okt 2026"
 CHANGELOG = [
+    {"version": "1.3", "date": "22 Okt 2026", "changes": [
+        "Ikon loading baru: mesin cuci yang sedang mencuci."]},
     {"version": "1.2", "date": "22 Okt 2026", "changes": [
         "Tampilan ikut logo One Stop Laundry: bar atas magenta berlogo.",
         "Tombol What's new dan nama karyawan yang sedang masuk di kanan atas."]},
