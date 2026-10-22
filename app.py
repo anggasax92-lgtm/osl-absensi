@@ -24,17 +24,22 @@ st.markdown("""
 <style>
 :root { --osl-1:#9F2063; --osl-2:#C23B80; --osl-3:#FBF0F5; --osl-ink:#2A0F1D;
         --ok:#16A34A; --bad:#DC2626; --warn:#D97706; --line:#E2E8F0; --muted:#64748B; }
-header[data-testid="stHeader"]{background:transparent;}
-[data-testid="stToolbar"], footer {display:none !important;}
-.block-container{padding-top:1.2rem;padding-bottom:3rem;max-width:520px;}
-.osl-hero{background:linear-gradient(135deg,var(--osl-1) 0%,var(--osl-2) 100%);
-  color:#fff;padding:18px 20px;border-radius:18px;margin-bottom:14px;
-  box-shadow:0 6px 18px rgba(159,32,99,.25);position:relative;}
-.osl-hero img{position:absolute;right:16px;top:50%;transform:translateY(-50%);height:74px;width:74px;
-  border-radius:50%;background:#fff;padding:3px;}
-.osl-hero .t{font-size:.82rem;opacity:.9;letter-spacing:.03em;text-transform:uppercase;}
-.osl-hero .jam{font-size:2.6rem;font-weight:800;line-height:1.05;margin:4px 0 2px;}
-.osl-hero .tgl{font-size:.92rem;opacity:.95;}
+header[data-testid="stHeader"]{display:none !important;}
+[data-testid="stToolbar"], [data-testid="stDecoration"], footer {display:none !important;}
+.block-container{padding-top:5rem;padding-bottom:3rem;max-width:520px;}
+/* bar atas magenta, sama dengan app OSL */
+.osl-bar{position:fixed;top:0;left:0;right:0;height:60px;z-index:1000001;background:var(--osl-1);
+  box-shadow:0 2px 10px rgba(80,10,45,.25);display:flex;align-items:center;gap:.6rem;
+  padding:0 1rem;color:#fff;}
+.osl-bar img{height:44px;width:44px;border-radius:50%;background:#fff;padding:2px;}
+.osl-bar .t{font-weight:800;font-size:1rem;letter-spacing:.08em;line-height:1.05;white-space:nowrap;}
+.osl-bar .t small{display:block;font-size:.6rem;font-weight:700;letter-spacing:.18em;opacity:.85;}
+.osl-bar .pill{margin-left:auto;background:#fff;color:var(--osl-1);border-radius:999px;
+  padding:.4rem .95rem;font-weight:700;font-size:.9rem;white-space:nowrap;}
+.osl-hero{background:var(--osl-3);border:1px solid #F1D5E3;color:var(--osl-ink);padding:14px 18px;
+  border-radius:14px;margin-bottom:14px;}
+.osl-hero .jam{font-size:2.4rem;font-weight:800;line-height:1.05;color:var(--osl-1);}
+.osl-hero .tgl{font-size:.9rem;color:var(--muted);margin-top:2px;}
 .me{display:flex;align-items:center;gap:12px;}
 .avatar{width:46px;height:46px;border-radius:50%;background:var(--osl-1);color:#fff;
   display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.25rem;flex:none;}
@@ -101,7 +106,9 @@ def _logo() -> str:
 
 def hero():
     now = ab.now_wib()
-    st.markdown(f"<div class='osl-hero'>{_logo()}<div class='t'>One Stop Laundry · Absensi</div>"
+    st.markdown(f"<div class='osl-bar'>{_logo()}<div class='t'>ONE STOP<small>LAUNDRY</small></div>"
+                "<div class='pill'>🕒 Absensi</div></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='osl-hero'>"
                 f"<div class='jam'>{now:%H:%M} <span style='font-size:1rem'>WIB</span></div>"
                 f"<div class='tgl'>{ab.tanggal_panjang(now.date())}</div></div>",
                 unsafe_allow_html=True)
