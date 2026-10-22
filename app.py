@@ -34,8 +34,23 @@ header[data-testid="stHeader"]{display:none !important;}
 .osl-bar img{height:44px;width:44px;border-radius:50%;background:#fff;padding:2px;}
 .osl-bar .t{font-weight:800;font-size:1rem;letter-spacing:.08em;line-height:1.05;white-space:nowrap;}
 .osl-bar .t small{display:block;font-size:.6rem;font-weight:700;letter-spacing:.18em;opacity:.85;}
-.osl-bar .pill{margin-left:auto;background:#fff;color:var(--osl-1);border-radius:999px;
-  padding:.4rem .95rem;font-weight:700;font-size:.9rem;white-space:nowrap;}
+/* What's new + akun di kanan bar */
+.st-key-abs_kanan{position:fixed;top:13px;right:1rem;z-index:1000004;width:auto !important;
+  flex-wrap:nowrap !important;}
+.st-key-abs_kanan button{border-radius:999px !important;min-height:0 !important;padding:.3rem .8rem !important;}
+.st-key-abs_kanan button div, .st-key-abs_kanan button span, .st-key-abs_kanan button p{
+  overflow:visible !important;max-width:none !important;}
+.st-key-abs_kanan button p{white-space:nowrap;font-size:.85rem;}
+.st-key-whatsnew button{background:#FDE7F1 !important;border:none !important;}
+.st-key-whatsnew button p, .st-key-whatsnew button svg{color:#2A0F1D !important;font-weight:600;}
+.st-key-akun button{background:transparent !important;border:1px solid rgba(255,255,255,.85) !important;}
+.st-key-akun button p, .st-key-akun button svg{color:#fff !important;}
+@media (max-width: 480px){
+  .osl-bar .t{display:none;}
+  .st-key-whatsnew button p{font-size:0 !important;}
+  .st-key-whatsnew button p::after{margin-left:0 !important;}
+  .st-key-akun button p{max-width:6.5rem;overflow:hidden;text-overflow:ellipsis;}
+}
 .osl-hero{background:var(--osl-3);border:1px solid #F1D5E3;color:var(--osl-ink);padding:14px 18px;
   border-radius:14px;margin-bottom:14px;}
 .osl-hero .jam{font-size:2.4rem;font-weight:800;line-height:1.05;color:var(--osl-1);}
@@ -107,11 +122,50 @@ def _logo() -> str:
 def hero():
     now = ab.now_wib()
     st.markdown(f"<div class='osl-bar'>{_logo()}<div class='t'>ONE STOP<small>LAUNDRY</small></div>"
-                "<div class='pill'>🕒 Absensi</div></div>", unsafe_allow_html=True)
+                "</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='osl-hero'>"
                 f"<div class='jam'>{now:%H:%M} <span style='font-size:1rem'>WIB</span></div>"
                 f"<div class='tgl'>{ab.tanggal_panjang(now.date())}</div></div>",
                 unsafe_allow_html=True)
+
+
+APP_VERSION = "1.2"
+APP_UPDATED = "22 Okt 2026"
+CHANGELOG = [
+    {"version": "1.2", "date": "22 Okt 2026", "changes": [
+        "Tampilan ikut logo One Stop Laundry: bar atas magenta berlogo.",
+        "Tombol What's new dan nama karyawan yang sedang masuk di kanan atas."]},
+    {"version": "1.1", "date": "22 Okt 2026", "changes": [
+        "Langkah absen bernomor (lokasi → selfie), jam absen hari ini, layar sukses besar."]},
+    {"version": "1.0", "date": "22 Okt 2026", "changes": [
+        "Clock in / clock out dengan nama + PIN, lokasi GPS harus di area kerja, wajib selfie."]},
+]
+
+
+def _keluar():
+    st.session_state["who"] = None
+
+
+def bar_kanan():
+    st.markdown(f"<style>.st-key-whatsnew button p::after{{content:'v{APP_VERSION}';margin-left:.45rem;"
+                "padding:.05rem .45rem;border-radius:999px;background:#9F2063;color:#fff;"
+                "font-size:.7rem;font-weight:800;}</style>", unsafe_allow_html=True)
+    who = st.session_state.get("who")
+    with st.container(horizontal=True, key="abs_kanan", vertical_alignment="center", gap="small",
+                      width="content"):
+        with st.popover("What's new", key="whatsnew"):
+            st.markdown(f"**What's new** · versi {APP_VERSION} · update {APP_UPDATED}")
+            for i, rel in enumerate(CHANGELOG):
+                st.markdown(f"**v{rel['version']}** · {rel['date']}"
+                            + ("  :violet-badge[terbaru]" if i == 0 else ""))
+                st.markdown(chr(10).join(f"- {c}" for c in rel["changes"]))
+        with st.popover(f"👤 {who.split(' ')[0] if who else 'Belum masuk'}", key="akun"):
+            if who:
+                st.caption(f"👤 Masuk sebagai **{who}**")
+                st.button("Keluar / ganti karyawan", on_click=_keluar, width="stretch",
+                          key="btn_keluar")
+            else:
+                st.caption("Pilih nama dan ketik PIN Anda untuk absen.")
 
 
 def step(n, judul, selesai=False):
@@ -128,6 +182,7 @@ def setup_panel(seen):
 
 
 hero()
+bar_kanan()
 SHEET_ID, _CREDS, _SEEN = _cfg()
 if not SHEET_ID or not _CREDS:
     setup_panel(_SEEN)
