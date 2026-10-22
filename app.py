@@ -49,9 +49,16 @@ def secret(key, default=None):
         return default
 
 
+def _cfg():
+    try:
+        return ab.cari_config(st.secrets)
+    except Exception:
+        return "", None, []
+
+
 @st.cache_resource(show_spinner=False)
 def get_store(sheet_id: str):
-    return ab.Store(ab.buka_spreadsheet(dict(secret("gcp_service_account")), sheet_id))
+    return ab.Store(ab.buka_spreadsheet(_cfg()[1], sheet_id))
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -64,11 +71,12 @@ def setup_panel():
     st.error("App absensi belum disambungkan ke Google Sheet.")
     st.caption("Pengelola: isi `gcp_service_account` dan `absensi_sheet_id` di "
                "Streamlit Cloud → Settings → Secrets (lihat README).")
+    st.caption("Kunci yang terbaca di Secrets: " + (", ".join(_SEEN) or "(kosong)"))
     st.stop()
 
 
-SHEET_ID = str(secret("absensi_sheet_id", "") or "").strip()
-if not SHEET_ID or not secret("gcp_service_account"):
+SHEET_ID, _CREDS, _SEEN = _cfg()
+if not SHEET_ID or not _CREDS:
     setup_panel()
 
 try:

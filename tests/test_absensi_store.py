@@ -126,6 +126,24 @@ def test_store_bolak_balik():
     assert s.karyawan() == []
 
 
+def test_cari_config():
+    sa = {"type": "service_account", "client_email": "x@y", "private_key": "K"}
+    sid = "1mLOr9EjxTuvFQrj_lMZRhSfDHvyUKZ-A3sE0kNOD_nk"
+    # urutan benar
+    assert ab.cari_config({"absensi_sheet_id": sid, "gcp_service_account": sa})[:2] == (sid, sa)
+    # salah urutan: id tertempel di bawah [gcp_service_account]
+    got = ab.cari_config({"gcp_service_account": {**sa, "absensi_sheet_id": sid}})
+    assert got[0] == sid and got[1] == sa
+    # di bawah tabel lain + URL lengkap
+    got = ab.cari_config({"auth": {"absensi_sheet_id": f"https://docs.google.com/spreadsheets/d/{sid}/edit"},
+                          "gcp_service_account": sa})
+    assert got[0] == sid
+    # kosong / kredensial tak lengkap
+    assert ab.cari_config({}) == ("", None, [])
+    sid2, creds, seen = ab.cari_config({"APP_PASSWORD": "", "gcp_service_account": {"a": 1}})
+    assert creds is None and seen == ["APP_PASSWORD", "[gcp_service_account]"]
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

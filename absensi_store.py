@@ -228,6 +228,43 @@ def pasangkan_shift(catatan: list[dict]) -> list[dict]:
     return out
 
 
+# ------------------------------------------------------------- Secrets
+def _as_dict(x) -> dict | None:
+    try:
+        return {k: x[k] for k in x.keys()}
+    except Exception:
+        return None
+
+
+def cari_config(secrets) -> tuple[str, dict | None, list[str]]:
+    """Cari absensi_sheet_id + kredensial service account di Secrets, di mana pun letaknya.
+
+    Kunci yang tertempel di bawah judul [..] lain (salah urutan di kotak Secrets) tetap
+    ditemukan. -> (sheet_id, creds | None, daftar nama kunci yang terbaca)."""
+    top = _as_dict(secrets) or {}
+    seen, sid, creds = [], "", None
+
+    def is_creds(d):
+        return isinstance(d, dict) and d.get("client_email") and d.get("private_key")
+
+    for k, v in top.items():
+        sub = _as_dict(v) if not isinstance(v, (str, int, float, bool)) else None
+        seen.append(f"[{k}]" if sub is not None else k)
+        if k == "absensi_sheet_id" and str(v).strip():
+            sid = str(v).strip()
+        if sub is not None:
+            if not sid and str(sub.get("absensi_sheet_id") or "").strip():
+                sid = str(sub["absensi_sheet_id"]).strip()
+            if is_creds(sub) and (creds is None or k == "gcp_service_account"):
+                creds = {kk: vv for kk, vv in sub.items() if kk != "absensi_sheet_id"}
+    if creds is None and is_creds(top):
+        creds = {k: v for k, v in top.items() if k != "absensi_sheet_id"}
+    m = re.search(r"/d/([A-Za-z0-9_-]{20,})", sid)       # URL lengkap ikut ditempel
+    if m:
+        sid = m.group(1)
+    return sid, creds, seen
+
+
 # --------------------------------------------------------- Google Sheet
 def buka_spreadsheet(creds_info: dict, sheet_id: str):
     import gspread
