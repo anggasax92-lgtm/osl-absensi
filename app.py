@@ -9,7 +9,9 @@ Rekapnya dibaca app OSL (tab Rekap Absensi) dari Google Sheet yang sama.
 """
 from __future__ import annotations
 
+import base64
 import html
+import os
 import time
 
 import streamlit as st
@@ -20,14 +22,16 @@ st.set_page_config(page_title="Absensi OSL", page_icon="🕒", layout="centered"
 
 st.markdown("""
 <style>
-:root { --osl-1:#0E7490; --osl-2:#0891B2; --osl-3:#ECFEFF; --osl-ink:#0F2B33;
+:root { --osl-1:#9F2063; --osl-2:#C23B80; --osl-3:#FBF0F5; --osl-ink:#2A0F1D;
         --ok:#16A34A; --bad:#DC2626; --warn:#D97706; --line:#E2E8F0; --muted:#64748B; }
 header[data-testid="stHeader"]{background:transparent;}
 [data-testid="stToolbar"], footer {display:none !important;}
 .block-container{padding-top:1.2rem;padding-bottom:3rem;max-width:520px;}
 .osl-hero{background:linear-gradient(135deg,var(--osl-1) 0%,var(--osl-2) 100%);
   color:#fff;padding:18px 20px;border-radius:18px;margin-bottom:14px;
-  box-shadow:0 6px 18px rgba(14,116,144,.25);}
+  box-shadow:0 6px 18px rgba(159,32,99,.25);position:relative;}
+.osl-hero img{position:absolute;right:16px;top:50%;transform:translateY(-50%);height:74px;width:74px;
+  border-radius:50%;background:#fff;padding:3px;}
 .osl-hero .t{font-size:.82rem;opacity:.9;letter-spacing:.03em;text-transform:uppercase;}
 .osl-hero .jam{font-size:2.6rem;font-weight:800;line-height:1.05;margin:4px 0 2px;}
 .osl-hero .tgl{font-size:.92rem;opacity:.95;}
@@ -87,9 +91,17 @@ def load_master(sheet_id: str):
     return s.karyawan(), s.lokasi()
 
 
+def _logo() -> str:
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "osl_logo.png")
+    if not os.path.exists(path):
+        return ""
+    with open(path, "rb") as f:
+        return f"<img src='data:image/png;base64,{base64.b64encode(f.read()).decode()}'/>"
+
+
 def hero():
     now = ab.now_wib()
-    st.markdown(f"<div class='osl-hero'><div class='t'>🧺 One Stop Laundry · Absensi</div>"
+    st.markdown(f"<div class='osl-hero'>{_logo()}<div class='t'>One Stop Laundry · Absensi</div>"
                 f"<div class='jam'>{now:%H:%M} <span style='font-size:1rem'>WIB</span></div>"
                 f"<div class='tgl'>{ab.tanggal_panjang(now.date())}</div></div>",
                 unsafe_allow_html=True)
