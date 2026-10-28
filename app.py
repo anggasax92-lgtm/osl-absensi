@@ -326,7 +326,7 @@ if ss.flash:
 
 # jadwal day off (informasi saja; absen tetap bisa, rekap yang menandai)
 jadwal = ab.status_jadwal(k, ab.now_wib().date(), load_tukar(SHEET_ID))
-idx_off = ab.day_off_idx(k)
+idx_off = ab.day_off_idx(k, ab.now_wib().date())
 if jadwal == ab.OFF:
     st.info(f"🛌 Hari ini **day off** Anda (hari {ab.HARI[idx_off]}). Absen tetap bisa dilakukan, "
             "tetapi rekap akan menandainya sebagai masuk di hari day off.")

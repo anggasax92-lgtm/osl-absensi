@@ -284,6 +284,34 @@ def test_arsip_foto_lama():
     assert s.hapus_foto({"absensi": [], "piket": []}) == 0
 
 
+def test_riwayat_day_off_berlaku_ke_depan():
+    s = ab.Store(FakeSpreadsheet())
+    s.simpan_karyawan([{"Nama": "Ayu", "PIN": "1", "Lokasi": "Semua", "Aktif": "Ya",
+                        "Tipe": "Tetap", "Area Piket": "A", "Day Off": "Sabtu"}])
+    k = s.karyawan()[0]
+    assert k["_riwayat"] == [] and ab.day_off_idx(k) == 5
+    # Sabtu diganti Jumat mulai 1 Nov 2026
+    s.tambah_riwayat(nama="Ayu", mulai=dt.date(2026, 11, 1), day_off="Jumat", dasar="Sabtu")
+    s.simpan_karyawan([{"Nama": "Ayu", "PIN": "1", "Lokasi": "Semua", "Aktif": "Ya",
+                        "Tipe": "Tetap", "Area Piket": "A", "Day Off": "Jumat"}])
+    k = s.karyawan()[0]
+    assert ab.day_off_idx(k) == 4                                     # sekarang: Jumat
+    assert ab.day_off_idx(k, dt.date(2026, 10, 31)) == 5              # sebelum 1 Nov: tetap Sabtu
+    assert ab.day_off_idx(k, dt.date(2026, 11, 1)) == 4
+    assert ab.status_jadwal(k, dt.date(2026, 10, 31)) == ab.OFF       # Sabtu lama tetap day off
+    assert ab.status_jadwal(k, dt.date(2026, 10, 30)) == ab.KERJA     # Jumat lama tetap hari kerja
+    assert ab.status_jadwal(k, dt.date(2026, 11, 6)) == ab.OFF        # Jumat baru day off
+    assert ab.status_jadwal(k, dt.date(2026, 11, 7)) == ab.KERJA
+    # Oktober masih 5 Sabtu; November: Jumat 6,13,20,27 = 4
+    assert ab.jatah_day_off(k, 2026, 10) == 5 and ab.jatah_day_off(k, 2026, 11) == 4
+    # perubahan kedua tidak menambah baris dasar lagi
+    s.tambah_riwayat(nama="Ayu", mulai=dt.date(2026, 12, 1), day_off="Senin", dasar="Jumat")
+    assert len(s.riwayat_day_off()["Ayu"]) == 3
+    # tukar sakit memakai hari day off yang berlaku pada minggu itu
+    assert ab.rencana_tukar(s.karyawan()[0], dt.date(2026, 11, 4), [])[0] == dt.date(2026, 11, 6)
+    assert ab.rencana_tukar(s.karyawan()[0], dt.date(2026, 10, 28), [])[0] == dt.date(2026, 10, 31)
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

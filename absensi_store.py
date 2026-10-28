@@ -39,6 +39,9 @@ SHEET_PIKET = "Piket"
 HEAD_PIKET = ["ID", "Waktu", "Tanggal", "Nama", "Area", "Foto 1", "Foto 2", "Foto 3"]
 RANGE_PIKET_TANPA_FOTO = "A:E"
 JUMLAH_FOTO_PIKET = 3        # persis 3 foto per piket
+SHEET_RIWAYAT = "Riwayat_Day_Off"
+HEAD_RIWAYAT = ["Nama", "Mulai Berlaku", "Day Off", "Dicatat Oleh", "Waktu Catat"]
+AWAL_RIWAYAT = "2000-01-01"          # baris dasar: hari day off sebelum perubahan pertama
 SHEET_TUKAR = "Tukar_Day_Off"
 HEAD_TUKAR = ["ID", "Nama", "Tanggal Sakit", "Day Off Dipindah", "Catatan", "Dicatat Oleh",
               "Waktu Catat"]
@@ -167,8 +170,21 @@ def is_freelance(k: dict) -> bool:
     return str(k.get("Tipe") or "").strip().lower().startswith("free")
 
 
-def day_off_idx(k: dict) -> int | None:
-    return None if is_freelance(k) else hari_index(k.get("Day Off"))
+def day_off_idx(k: dict, tgl: dt.date | None = None) -> int | None:
+    """Hari day off (Senin = 0). Dengan `tgl`: hari day off yang BERLAKU pada tanggal itu, menurut
+    riwayat perubahan (k["_riwayat"] = [(mulai, idx), ...] urut naik). Tanpa `tgl`: yang berlaku sekarang."""
+    if is_freelance(k):
+        return None
+    riw = k.get("_riwayat")
+    if tgl is not None and riw:
+        idx = riw[0][1]
+        for mulai, h in riw:
+            if mulai <= tgl:
+                idx = h
+            else:
+                break
+        return idx
+    return hari_index(k.get("Day Off"))
 
 
 def area_piket(k: dict) -> list[str]:
@@ -215,7 +231,7 @@ def status_jadwal(k: dict, tgl: dt.date, tukar: list[dict] | None = None) -> str
     sakit, pindah = tukar_sets(tukar or [], k["Nama"])
     if tgl in sakit:
         return SAKIT
-    idx = day_off_idx(k)
+    idx = day_off_idx(k, tgl)
     if idx is not None and tgl.weekday() == idx and tgl not in pindah:
         return OFF
     return KERJA
@@ -223,19 +239,16 @@ def status_jadwal(k: dict, tgl: dt.date, tukar: list[dict] | None = None) -> str
 
 def jatah_day_off(k: dict, tahun: int, bulan: int) -> int:
     """Berapa kali hari day off jatuh di bulan itu (tanpa memperhitungkan tukar)."""
-    idx = day_off_idx(k)
-    if idx is None:
-        return 0
     d, n = dt.date(tahun, bulan, 1), 0
     while d.month == bulan:
-        n += d.weekday() == idx
+        n += d.weekday() == day_off_idx(k, d) if day_off_idx(k, d) is not None else 0
         d += dt.timedelta(days=1)
     return n
 
 
 def tgl_off_minggu(k: dict, tgl: dt.date) -> dt.date | None:
     """Tanggal day off karyawan di minggu (Senin-Minggu) yang sama dengan `tgl`."""
-    idx = day_off_idx(k)
+    idx = day_off_idx(k, tgl)
     if idx is None:
         return None
     return tgl - dt.timedelta(days=tgl.weekday()) + dt.timedelta(days=idx)
@@ -247,7 +260,7 @@ def rencana_tukar(k: dict, tgl_sakit: dt.date, tukar: list[dict]) -> tuple[dt.da
     Sakit pertama di satu minggu memindahkan day off minggu itu menjadi hari kerja. Sakit berikutnya
     di minggu yang sama tidak punya day off lagi untuk dipindah: tetap dicatat sebagai sakit
     (day off dipindah = None)."""
-    idx = day_off_idx(k)
+    idx = day_off_idx(k, tgl_sakit)
     if idx is None:
         return None, f"{k['Nama']} tidak punya day off tetap (freelance / belum diisi)."
     sakit, pindah = tukar_sets(tukar, k["Nama"])
@@ -473,8 +486,35 @@ class Store:
         return w
 
     # ---- master
+    def riwayat_day_off(self) -> dict[str, list[tuple[dt.date, int | None]]]:
+        """{nama: [(mulai_berlaku, idx_hari_off | None), ...]} urut tanggal naik."""
+        try:
+            rows = _rows_to_dicts(self.ws(SHEET_RIWAYAT, HEAD_RIWAYAT).get_all_values(), HEAD_RIWAYAT)
+        except Exception:
+            return {}          # riwayat hanya penyempurna; gagal baca = pakai day off sekarang
+        out: dict[str, list] = {}
+        for r in rows:
+            mulai = _tgl(r["Mulai Berlaku"])
+            if mulai and str(r["Nama"]).strip():
+                out.setdefault(str(r["Nama"]).strip(), []).append((mulai, hari_index(r["Day Off"])))
+        return {n: sorted(v, key=lambda x: x[0]) for n, v in out.items()}
+
+    def tambah_riwayat(self, *, nama: str, mulai: dt.date, day_off: str, oleh: str = "",
+                       dasar: str | None = None):
+        """Catat day off baru berlaku mulai `mulai`. Bila belum ada riwayat, `dasar` (hari lama)
+        dicatat dulu sebagai baris dasar supaya tanggal sebelum `mulai` tetap memakai hari lama."""
+        w = self.ws(SHEET_RIWAYAT, HEAD_RIWAYAT)
+        ada = nama in self.riwayat_day_off()
+        waktu = fmt_waktu(now_wib())
+        if not ada and dasar is not None:
+            w.append_row([nama, AWAL_RIWAYAT, dasar or "-", oleh, waktu], value_input_option="RAW",
+                         insert_data_option="INSERT_ROWS")
+        w.append_row([nama, mulai.strftime("%Y-%m-%d"), day_off or "-", oleh, waktu],
+                     value_input_option="RAW", insert_data_option="INSERT_ROWS")
+
     def karyawan(self) -> list[dict]:
         rows = _rows_to_dicts(self.ws(SHEET_KARYAWAN, HEAD_KARYAWAN).get_all_values(), HEAD_KARYAWAN)
+        riwayat = self.riwayat_day_off()
         out = []
         for r in rows:
             nama = str(r["Nama"]).strip()
@@ -485,7 +525,8 @@ class Store:
                             "Aktif": str(r["Aktif"]).strip() or "Ya",
                             "Tipe": str(r["Tipe"]).strip() or dflt.get("Tipe", TIPE_TETAP),
                             "Area Piket": str(r["Area Piket"]).strip() or dflt.get("Area Piket", ""),
-                            "Day Off": str(r["Day Off"]).strip() or dflt.get("Day Off", "")})
+                            "Day Off": str(r["Day Off"]).strip() or dflt.get("Day Off", ""),
+                            "_riwayat": riwayat.get(nama, [])})
         return out
 
     def lokasi(self) -> list[dict]:
