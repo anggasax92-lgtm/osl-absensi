@@ -233,22 +233,41 @@ def jatah_day_off(k: dict, tahun: int, bulan: int) -> int:
     return n
 
 
-def validasi_tukar(k: dict, tgl_sakit: dt.date, tgl_off: dt.date, tukar: list[dict]) -> str | None:
-    """Pesan error bila tukar day off tidak sah, None bila boleh."""
+def tgl_off_minggu(k: dict, tgl: dt.date) -> dt.date | None:
+    """Tanggal day off karyawan di minggu (Senin-Minggu) yang sama dengan `tgl`."""
     idx = day_off_idx(k)
     if idx is None:
-        return f"{k['Nama']} tidak punya day off tetap (freelance / belum diisi)."
-    if tgl_sakit.weekday() == idx:
-        return "Tanggal sakit jatuh di hari day off biasa; tukar hanya untuk sakit di luar day off."
-    if tgl_off.weekday() != idx:
-        return f"Tanggal yang dipindah harus hari day off {k['Nama']} ({HARI[idx]})."
-    if tgl_sakit.isocalendar()[:2] != tgl_off.isocalendar()[:2]:
-        return "Day off yang dipindah harus di minggu yang sama (Senin-Minggu) dengan hari sakit."
+        return None
+    return tgl - dt.timedelta(days=tgl.weekday()) + dt.timedelta(days=idx)
+
+
+def rencana_tukar(k: dict, tgl_sakit: dt.date, tukar: list[dict]) -> tuple[dt.date | None, str | None]:
+    """Sakit di luar day off -> (day_off_yang_dipindah | None, pesan_error | None).
+
+    Sakit pertama di satu minggu memindahkan day off minggu itu menjadi hari kerja. Sakit berikutnya
+    di minggu yang sama tidak punya day off lagi untuk dipindah: tetap dicatat sebagai sakit
+    (day off dipindah = None)."""
+    idx = day_off_idx(k)
+    if idx is None:
+        return None, f"{k['Nama']} tidak punya day off tetap (freelance / belum diisi)."
     sakit, pindah = tukar_sets(tukar, k["Nama"])
     if tgl_sakit in sakit:
-        return "Hari sakit ini sudah pernah dicatat."
+        return None, "Hari sakit ini sudah pernah dicatat."
+    if tgl_sakit.weekday() == idx and tgl_sakit not in pindah:
+        return None, "Tanggal sakit jatuh di hari day off biasa; tukar hanya untuk sakit di luar day off."
+    tgl_off = tgl_off_minggu(k, tgl_sakit)
     if tgl_off in pindah:
-        return "Day off pada tanggal itu sudah dipindah."
+        return None, None          # day off minggu ini sudah terpakai: sakit tanpa pengganti
+    return tgl_off, None
+
+
+def validasi_tukar(k: dict, tgl_sakit: dt.date, tgl_off: dt.date | None, tukar: list[dict]) -> str | None:
+    """Pesan error bila catatan tukar tidak sah, None bila boleh (tgl_off None = sakit tanpa tukar)."""
+    rencana, err = rencana_tukar(k, tgl_sakit, tukar)
+    if err:
+        return err
+    if tgl_off != rencana:
+        return "Day off yang dipindah harus day off minggu yang sama dengan hari sakit."
     return None
 
 
@@ -595,10 +614,10 @@ class Store:
         rows = _rows_to_dicts(self.ws(SHEET_TUKAR, HEAD_TUKAR).get_all_values(), HEAD_TUKAR)
         return [{k: (str(v).strip() if k != "_row" else v) for k, v in r.items()} for r in rows]
 
-    def tambah_tukar(self, *, nama, tgl_sakit: dt.date, tgl_off: dt.date, catatan="",
+    def tambah_tukar(self, *, nama, tgl_sakit: dt.date, tgl_off: dt.date | None, catatan="",
                      oleh="") -> dict:
         row = [uuid.uuid4().hex[:10], nama, tgl_sakit.strftime("%Y-%m-%d"),
-               tgl_off.strftime("%Y-%m-%d"), catatan, oleh, fmt_waktu(now_wib())]
+               tgl_off.strftime("%Y-%m-%d") if tgl_off else "", catatan, oleh, fmt_waktu(now_wib())]
         self.ws(SHEET_TUKAR, HEAD_TUKAR).append_row(row, value_input_option="RAW",
                                                     insert_data_option="INSERT_ROWS")
         return dict(zip(HEAD_TUKAR, row))

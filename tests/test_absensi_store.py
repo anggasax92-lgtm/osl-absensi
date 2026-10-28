@@ -192,12 +192,23 @@ def test_validasi_tukar():
     d = dt.date
     assert ab.validasi_tukar(K_AYU, d(2026, 10, 21), d(2026, 10, 24), []) is None
     assert "day off biasa" in ab.validasi_tukar(K_AYU, d(2026, 10, 24), d(2026, 10, 24), [])
-    assert "Sabtu" in ab.validasi_tukar(K_AYU, d(2026, 10, 21), d(2026, 10, 23), [])
+    assert "minggu yang sama" in ab.validasi_tukar(K_AYU, d(2026, 10, 21), d(2026, 10, 23), [])
     assert "minggu yang sama" in ab.validasi_tukar(K_AYU, d(2026, 10, 21), d(2026, 10, 31), [])
     assert "freelance" in ab.validasi_tukar(K_DANI, d(2026, 10, 21), d(2026, 10, 24), [])
     ada = [{"Nama": "Ayu", "Tanggal Sakit": "2026-10-21", "Day Off Dipindah": "2026-10-24"}]
     assert "sudah" in ab.validasi_tukar(K_AYU, d(2026, 10, 21), d(2026, 10, 24), ada)
-    assert "sudah" in ab.validasi_tukar(K_AYU, d(2026, 10, 22), d(2026, 10, 24), ada)
+    # sakit kedua di minggu yang sama: tetap sah, tanpa day off yang dipindah
+    assert ab.rencana_tukar(K_AYU, d(2026, 10, 22), ada) == (None, None)
+    assert ab.validasi_tukar(K_AYU, d(2026, 10, 22), None, ada) is None
+    assert "sudah" in ab.validasi_tukar(K_AYU, d(2026, 10, 21), None, ada)       # tanggal sakit ganda
+    assert ab.rencana_tukar(K_AYU, d(2026, 10, 21), []) == (d(2026, 10, 24), None)
+    # sakit tepat di day off yang sudah dipindah (kini hari kerja) boleh dicatat
+    assert ab.rencana_tukar(K_AYU, d(2026, 10, 24), ada) == (None, None)
+    # minggu lain tidak terpengaruh
+    assert ab.rencana_tukar(K_AYU, d(2026, 10, 28), ada) == (d(2026, 10, 31), None)
+    tukar2 = ada + [{"Nama": "Ayu", "Tanggal Sakit": "2026-10-22", "Day Off Dipindah": ""}]
+    assert ab.status_jadwal(K_AYU, d(2026, 10, 22), tukar2) == ab.SAKIT
+    assert ab.status_jadwal(K_AYU, d(2026, 10, 24), tukar2) == ab.KERJA
 
 
 def test_piket_wajib_sebelum_clock_out():
