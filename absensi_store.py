@@ -609,6 +609,47 @@ class Store:
                 pass
         return out
 
+    # ---- arsip foto lama
+    def cari_foto_lama(self, sebelum: dt.date) -> dict[str, list[int]]:
+        """Nomor baris (Absensi / Piket) bertanggal SEBELUM `sebelum` yang fotonya masih terisi."""
+        spek = {"absensi": (SHEET_ABSEN, HEAD_ABSEN, COL_FOTO, COL_FOTO),
+                "piket": (SHEET_PIKET, HEAD_PIKET, "F", "H")}
+        hasil = {}
+        for kunci, (judul, head, c0, c1) in spek.items():
+            w = self.ws(judul, head)
+            tgl = w.get("C:C")
+            lama = [i + 1 for i, r in enumerate(tgl) if i >= 1 and r and _tgl(r[0]) and _tgl(r[0]) < sebelum]
+            if not lama:
+                hasil[kunci] = []
+                continue
+            isi = w.get(f"{c0}2:{c1}{max(lama)}")
+            ada = set()
+            for i, r in enumerate(isi):
+                if any(str(x).strip() for x in r):
+                    ada.add(i + 2)
+            hasil[kunci] = [r for r in lama if r in ada]
+        return hasil
+
+    def hapus_foto(self, baris: dict[str, list[int]]) -> int:
+        """Kosongkan HANYA kolom foto pada baris yang diberikan (baris data tetap). -> jumlah baris."""
+        total = 0
+        for kunci, judul, head, c0, c1 in (("absensi", SHEET_ABSEN, HEAD_ABSEN, COL_FOTO, COL_FOTO),
+                                           ("piket", SHEET_PIKET, HEAD_PIKET, "F", "H")):
+            rows = sorted(set(int(r) for r in baris.get(kunci, []) if int(r) >= 2))
+            if not rows:
+                continue
+            blok, a, b = [], rows[0], rows[0]
+            for r in rows[1:]:
+                if r == b + 1:
+                    b = r
+                else:
+                    blok.append((a, b))
+                    a = b = r
+            blok.append((a, b))
+            self.ws(judul, head).batch_clear([f"{c0}{x}:{c1}{y}" for x, y in blok])
+            total += len(rows)
+        return total
+
     # ---- tukar day off
     def tukar_day_off(self) -> list[dict]:
         rows = _rows_to_dicts(self.ws(SHEET_TUKAR, HEAD_TUKAR).get_all_values(), HEAD_TUKAR)

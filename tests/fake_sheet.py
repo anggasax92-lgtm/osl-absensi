@@ -41,11 +41,20 @@ class FakeWS:
 
     def get(self, rng):
         a, b = rng.split(":")
-        c0, c1 = _col(a), _col(b)
-        return [[str(x) for x in r[c0 - 1:c1]] for r in self.data]
+        c0, c1 = _col(re.match(r"[A-Z]+", a).group()), _col(re.match(r"[A-Z]+", b).group())
+        r0 = int(re.search(r"\d+", a).group()) if re.search(r"\d+", a) else 1
+        r1 = int(re.search(r"\d+", b).group()) if re.search(r"\d+", b) else len(self.data)
+        return [[str(x) for x in r[c0 - 1:c1]] for r in self.data[r0 - 1:r1]]
 
     def batch_clear(self, ranges):
         for rng in ranges:
+            m = re.match(r"([A-Z]+)(\d+):([A-Z]+)(\d+)$", rng)
+            if m:                                    # blok sel: kosongkan isi, baris tetap
+                c0, r0, c1, r1 = _col(m.group(1)), int(m.group(2)), _col(m.group(3)), int(m.group(4))
+                for r in range(r0, min(r1, len(self.data)) + 1):
+                    for c in range(c0, min(c1, len(self.data[r - 1])) + 1):
+                        self.data[r - 1][c - 1] = ""
+                continue
             m = re.match(r"[A-Z]+(\d+)", rng)
             del self.data[int(m.group(1)) - 1:]
 
@@ -61,7 +70,7 @@ class FakeWS:
             try:
                 row = self.data[r - 1]
                 vals = [str(x) for x in row[c - 1:c1]]
-                out.append([vals] if vals else [])
+                out.append([vals] if any(vals) else [])
             except IndexError:
                 out.append([])
         return out

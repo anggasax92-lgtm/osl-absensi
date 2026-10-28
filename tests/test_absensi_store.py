@@ -264,6 +264,26 @@ def test_foto_piket_muat_di_sel():
     assert max(back.size) == 720
 
 
+def test_arsip_foto_lama():
+    s = ab.Store(FakeSpreadsheet())
+    for hari, jenis in (("2026-06-01 08:00", "IN"), ("2026-06-02 08:00", "IN"), ("2026-10-20 08:00", "IN")):
+        s.tambah_catatan(nama="Ayu", jenis=jenis, lokasi="L", lat=1, lon=1, akurasi=1, jarak=1,
+                         perangkat="x", foto_b64="FOTO" + hari[5:10], waktu=t(hari))
+    s.tambah_piket(nama="Ayu", area="A", fotos_b64=["a", "b", "c"], waktu=t("2026-06-01 16:00"))
+    s.tambah_piket(nama="Ayu", area="A", fotos_b64=["d", "e", "f"], waktu=t("2026-10-21 16:00"))
+    batas = dt.date(2026, 7, 28)                       # 3 bulan sebelum 28 Okt
+    lama = s.cari_foto_lama(batas)
+    assert lama == {"absensi": [2, 3], "piket": [2]}
+    assert s.hapus_foto(lama) == 3
+    # foto lama kosong, baris datanya tetap; foto baru utuh
+    assert [c["Waktu"][:10] for c in s.catatan()] == ["2026-06-01", "2026-06-02", "2026-10-20"]
+    assert s.foto([2, 3, 4]) == {4: "FOTO10-20"}
+    assert s.foto_piket([2, 3]) == {3: ["d", "e", "f"]}
+    assert [p["Nama"] for p in s.piket()] == ["Ayu", "Ayu"]
+    assert s.cari_foto_lama(batas) == {"absensi": [], "piket": []}     # tidak ada yang tersisa
+    assert s.hapus_foto({"absensi": [], "piket": []}) == 0
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
