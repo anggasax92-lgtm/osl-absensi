@@ -144,6 +144,115 @@ def test_cari_config():
     assert creds is None and seen == ["APP_PASSWORD", "[gcp_service_account]"]
 
 
+K_AYU = {"Nama": "Ayu", "Tipe": "Tetap", "Area Piket": "Area Gosok, Area Kamar Lipat Taplak",
+         "Day Off": "Sabtu"}
+K_DANI = {"Nama": "Dani", "Tipe": "Freelance", "Area Piket": "", "Day Off": ""}
+
+
+def test_default_aturan_dari_nama():
+    s = ab.Store(FakeSpreadsheet())
+    # Sheet lama: hanya 4 kolom, tanpa Tipe / Area Piket / Day Off
+    w = s.ws(ab.SHEET_KARYAWAN, ["Nama", "PIN", "Lokasi", "Aktif"])
+    w.update([["Ayu", "1111", "", "Ya"], ["Ami", "2222", "", "Ya"], ["Lukman", "3333", "", "Ya"],
+              ["Dani", "4444", "", "Ya"], ["Budi", "5555", "", "Ya"]], "A2")
+    s2 = ab.Store(s.sh)                                   # buka ulang: header diperluas otomatis
+    ks = {k["Nama"]: k for k in s2.karyawan()}
+    assert s2.ws(ab.SHEET_KARYAWAN, ab.HEAD_KARYAWAN).row_values(1) == ab.HEAD_KARYAWAN
+    assert ab.area_piket(ks["Ayu"]) == ["Area Gosok", "Area Kamar Lipat Taplak"]
+    assert ab.area_piket(ks["Lukman"]) == ["Area Depan/Luar"]
+    assert ab.area_piket(ks["Ami"]) == ["Area Mesin Cuci & Pengering"]
+    assert [ab.day_off_idx(ks[n]) for n in ("Ayu", "Ami", "Lukman")] == [5, 0, 6]
+    assert ab.is_freelance(ks["Dani"]) and not ab.wajib_piket(ks["Dani"])
+    assert ab.day_off_idx(ks["Dani"]) is None
+    assert ab.wajib_piket(ks["Budi"]) and ab.day_off_idx(ks["Budi"]) is None   # tak dikenal = tetap
+    # nilai di Sheet menggantikan bawaan; '-' = sengaja kosong
+    s2.simpan_karyawan([{"Nama": "Ayu", "PIN": "1", "Lokasi": "Semua", "Aktif": "Ya",
+                         "Tipe": "Tetap", "Area Piket": "Area Baru", "Day Off": "-"}])
+    ayu = s2.karyawan()[0]
+    assert ab.area_piket(ayu) == ["Area Baru"] and ab.day_off_idx(ayu) is None
+
+
+def test_day_off_kalender_dan_tukar():
+    # Oktober 2026 punya 5 Sabtu (3,10,17,24,31) dan 4 Senin; Ayu libur Sabtu
+    assert ab.jatah_day_off(K_AYU, 2026, 10) == 5
+    assert ab.jatah_day_off({**K_AYU, "Day Off": "Senin"}, 2026, 10) == 4
+    assert ab.jatah_day_off(K_DANI, 2026, 10) == 0
+    assert ab.status_jadwal(K_AYU, dt.date(2026, 10, 31)) == ab.OFF
+    assert ab.status_jadwal(K_AYU, dt.date(2026, 10, 30)) == ab.KERJA
+    assert ab.status_jadwal(K_DANI, dt.date(2026, 10, 31)) == ab.KERJA      # freelance tanpa day off
+    # sakit Rabu 21 Okt, day off minggu itu (Sabtu 24 Okt) dipindah jadi hari kerja
+    tukar = [{"Nama": "Ayu", "Tanggal Sakit": "2026-10-21", "Day Off Dipindah": "2026-10-24"}]
+    assert ab.status_jadwal(K_AYU, dt.date(2026, 10, 21), tukar) == ab.SAKIT
+    assert ab.status_jadwal(K_AYU, dt.date(2026, 10, 24), tukar) == ab.KERJA
+    assert ab.status_jadwal(K_AYU, dt.date(2026, 10, 17), tukar) == ab.OFF   # minggu lain tak terpengaruh
+    assert ab.status_jadwal({**K_AYU, "Nama": "Ami"}, dt.date(2026, 10, 24), tukar) == ab.OFF
+
+
+def test_validasi_tukar():
+    d = dt.date
+    assert ab.validasi_tukar(K_AYU, d(2026, 10, 21), d(2026, 10, 24), []) is None
+    assert "day off biasa" in ab.validasi_tukar(K_AYU, d(2026, 10, 24), d(2026, 10, 24), [])
+    assert "Sabtu" in ab.validasi_tukar(K_AYU, d(2026, 10, 21), d(2026, 10, 23), [])
+    assert "minggu yang sama" in ab.validasi_tukar(K_AYU, d(2026, 10, 21), d(2026, 10, 31), [])
+    assert "freelance" in ab.validasi_tukar(K_DANI, d(2026, 10, 21), d(2026, 10, 24), [])
+    ada = [{"Nama": "Ayu", "Tanggal Sakit": "2026-10-21", "Day Off Dipindah": "2026-10-24"}]
+    assert "sudah" in ab.validasi_tukar(K_AYU, d(2026, 10, 21), d(2026, 10, 24), ada)
+    assert "sudah" in ab.validasi_tukar(K_AYU, d(2026, 10, 22), d(2026, 10, 24), ada)
+
+
+def test_piket_wajib_sebelum_clock_out():
+    masuk = rec("Ayu", "IN", "2026-10-22 08:00")
+    pk_lama = {"Nama": "Ayu", "_t": t("2026-10-21 16:00")}
+    pk_baru = {"Nama": "Ayu", "_t": t("2026-10-22 15:30")}
+    assert not ab.piket_selesai([], [masuk])
+    assert not ab.piket_selesai([pk_lama], [masuk])         # piket kemarin tak dihitung
+    assert ab.piket_selesai([pk_lama, pk_baru], [masuk])
+    assert not ab.piket_selesai([pk_baru], [])               # belum clock in
+
+
+def test_store_piket_dan_tukar():
+    s = ab.Store(FakeSpreadsheet())
+    assert s.piket() == [] and s.tukar_day_off() == []
+    try:
+        s.tambah_piket(nama="Ayu", area="Area Gosok", fotos_b64=["a", "b"])
+        assert False, "harus menolak selain 3 foto"
+    except ValueError:
+        pass
+    s.tambah_piket(nama="Ayu", area="Area Gosok", fotos_b64=["a", "b", "c"],
+                   waktu=t("2026-10-22 15:30"))
+    s.tambah_piket(nama="Ami", area="Mesin", fotos_b64=["d", "e", "f"], waktu=t("2026-10-23 15:00"))
+    pk = s.piket()
+    assert [p["Nama"] for p in pk] == ["Ayu", "Ami"] and "Foto 1" not in pk[0]
+    assert [p["Nama"] for p in s.piket(nama="Ami")] == ["Ami"]
+    assert s.piket(mulai=dt.date(2026, 10, 23), sampai=dt.date(2026, 10, 23))[0]["Nama"] == "Ami"
+    assert s.foto_piket([p["_row"] for p in pk]) == {2: ["a", "b", "c"], 3: ["d", "e", "f"]}
+    s.tambah_tukar(nama="Ayu", tgl_sakit=dt.date(2026, 10, 21), tgl_off=dt.date(2026, 10, 24),
+                   catatan="demam", oleh="x@y")
+    tk = s.tukar_day_off()
+    assert tk[0]["Nama"] == "Ayu" and tk[0]["Tanggal Sakit"] == "2026-10-21"
+    s.hapus_tukar(tk[0]["_row"])
+    assert s.tukar_day_off() == []
+
+
+def test_foto_piket_muat_di_sel():
+    import random
+    from PIL import Image
+    im = Image.new("RGB", (3000, 4000))
+    px = im.load()
+    random.seed(2)
+    for x in range(0, 3000, 5):
+        for y in range(0, 4000, 5):
+            px[x, y] = (random.randrange(256), random.randrange(256), random.randrange(256))
+    buf = io.BytesIO()
+    im.save(buf, "JPEG", quality=95)
+    assert len(ab.kecilkan_foto_piket(buf.getvalue())) <= ab.MAX_FOTO_CHARS
+    bersih = Image.new("RGB", (4000, 3000), (200, 220, 240))      # foto biasa tetap besar
+    buf = io.BytesIO()
+    bersih.save(buf, "JPEG")
+    back = Image.open(io.BytesIO(ab.foto_bytes(ab.kecilkan_foto_piket(buf.getvalue()))))
+    assert max(back.size) == 720
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

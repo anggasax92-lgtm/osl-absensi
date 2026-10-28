@@ -49,19 +49,25 @@ class FakeWS:
             m = re.match(r"[A-Z]+(\d+)", rng)
             del self.data[int(m.group(1)) - 1:]
 
-    def append_row(self, row, value_input_option=None, insert_data_option=None):
+    def append_row(self, row, value_input_option=None, insert_data_option=None, table_range=None):
         self.data.append(list(row))
 
     def batch_get(self, ranges):
         out = []
         for rng in ranges:
-            m = re.match(r"([A-Z]+)(\d+)", rng)
+            m = re.match(r"([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?", rng)
             c, r = _col(m.group(1)), int(m.group(2))
+            c1 = _col(m.group(3)) if m.group(3) else c
             try:
-                out.append([[str(self.data[r - 1][c - 1])]])
+                row = self.data[r - 1]
+                vals = [str(x) for x in row[c - 1:c1]]
+                out.append([vals] if vals else [])
             except IndexError:
                 out.append([])
         return out
+
+    def delete_rows(self, r):
+        del self.data[r - 1]
 
 
 class FakeSpreadsheet:

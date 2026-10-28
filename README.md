@@ -7,6 +7,9 @@ App Streamlit terbuka (tanpa login) untuk **clock in / clock out** karyawan:
    **radius lokasi kerja** yang boleh untuknya.
 3. **Selfie** lewat kamera (bukan dari galeri), dikecilkan lalu disimpan.
 4. App otomatis menentukan *Clock In* atau *Clock Out* (clock in terakhir < 20 jam lalu → Clock Out).
+5. **Piket kebersihan**: staff tetap harus mengirim tepat **3 foto** area piketnya sebelum bisa
+   Clock Out. Staff **freelance** (kolom Tipe = Freelance, mis. Dani) absen tanpa piket.
+6. Hari **day off** tetap tiap minggu ditampilkan di layar (informasi; rekap yang menandainya).
 
 Semua data masuk ke satu **Google Sheet** dan direkap di app OSL
 (`osl-invoice-web`) tab **🕒 Rekap Absensi** — di sana juga daftar karyawan, PIN,
@@ -20,7 +23,11 @@ dan titik lokasi kerja diatur.
 | `tests/` | `python tests/test_absensi_store.py` (pakai Sheet tiruan, tanpa Google) |
 
 ## Isi Google Sheet (dibuat otomatis)
-- `Karyawan`: Nama · PIN · Lokasi (`Semua` atau nama lokasi dipisah koma) · Aktif (`Ya`/`Tidak`)
+- `Karyawan`: Nama · PIN · Lokasi (`Semua` atau nama lokasi dipisah koma) · Aktif (`Ya`/`Tidak`) ·
+  Tipe (`Tetap`/`Freelance`) · Area Piket (dipisah koma) · Day Off (nama hari atau `-`).
+  Kolom baru yang kosong memakai nilai awal `DEFAULT_ATURAN` (Ayu, Ami, Lukman, Dani, SuperAdmin).
+- `Piket`: ID · Waktu · Tanggal · Nama · Area · Foto 1 · Foto 2 · Foto 3 (JPEG base64)
+- `Tukar_Day_Off`: ID · Nama · Tanggal Sakit · Day Off Dipindah · Catatan · Dicatat Oleh · Waktu Catat
 - `Lokasi`: Nama Lokasi · Latitude · Longitude · Radius (m)
 - `Absensi`: ID · Waktu · Tanggal · Jam · Nama · Jenis (IN/OUT) · Lokasi · Latitude · Longitude ·
   Akurasi (m) · Jarak (m) · Perangkat · Foto (JPEG base64 ±10-30 KB)

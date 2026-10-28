@@ -5,11 +5,13 @@ Absensi Karyawan - One Stop Laundry.
 App terbuka untuk siapa saja (tanpa login Google): karyawan pilih nama, ketik PIN,
 lalu clock in / clock out dengan selfie. Lokasi HP diambil dari browser dan absen
 hanya diterima kalau karyawan berada di dalam radius lokasi kerja.
+Staff tetap wajib piket kebersihan (3 foto ruangan) sebelum clock out; freelance tidak.
 Rekapnya dibaca app OSL (tab Rekap Absensi) dari Google Sheet yang sama.
 """
 from __future__ import annotations
 
 import base64
+import datetime as dt
 import html
 import os
 import time
@@ -68,6 +70,9 @@ header[data-testid="stHeader"] *{pointer-events:none;}
 .aksi.in{background:var(--ok);} .aksi.out{background:var(--warn);}
 .aksi small{font-weight:500;opacity:.9;font-size:.78rem;display:block;}
 .aksi .big{font-size:1.35rem;letter-spacing:.02em;}
+.piket{border-radius:14px;padding:12px 16px;margin:12px 0;background:#ECFEFF;
+  border:1px solid #A5F3FC;color:#0E3A45;font-size:.92rem;}
+.piket b{color:#0E3A45;}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 4px;}
 .chip{background:#F1F5F9;border:1px solid var(--line);border-radius:999px;padding:3px 10px;
   font-size:.8rem;color:var(--osl-ink);}
@@ -114,6 +119,14 @@ def load_master(sheet_id: str):
     return s.karyawan(), s.lokasi()
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def load_tukar(sheet_id: str):
+    try:
+        return get_store(sheet_id).tukar_day_off()
+    except Exception:
+        return []          # jadwal day off hanya informasi; absen tidak boleh macet karenanya
+
+
 def _logo() -> str:
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "osl_logo.png")
     if not os.path.exists(path):
@@ -133,9 +146,14 @@ def hero():
                 unsafe_allow_html=True)
 
 
-APP_VERSION = "1.3"
-APP_UPDATED = "22 Okt 2026"
+APP_VERSION = "1.4"
+APP_UPDATED = "28 Okt 2026"
 CHANGELOG = [
+    {"version": "1.4", "date": "28 Okt 2026", "changes": [
+        "Piket kebersihan: staff tetap wajib mengirim tepat 3 foto area piketnya sebelum bisa "
+        "Clock Out.",
+        "Staff freelance (mis. Dani) tetap bisa Clock In / Clock Out tanpa piket.",
+        "Hari day off tampil di layar absen (Ayu Sabtu, Ami Senin, Lukman Minggu)."]},
     {"version": "1.3", "date": "22 Okt 2026", "changes": [
         "Ikon loading baru: mesin cuci yang sedang mencuci."]},
     {"version": "1.2", "date": "22 Okt 2026", "changes": [
@@ -206,6 +224,7 @@ ss.setdefault("geo_n", 0)
 ss.setdefault("cam_n", 0)
 ss.setdefault("done", None)
 ss.setdefault("flash", "")
+ss.setdefault("pk_n", 0)
 
 aktif = [k for k in KARYAWAN if ab.is_aktif(k["Aktif"])]
 
@@ -299,6 +318,63 @@ if ss.flash:
     st.warning(ss.flash)
     ss.flash = ""
 
+# jadwal day off (informasi saja; absen tetap bisa, rekap yang menandai)
+jadwal = ab.status_jadwal(k, ab.now_wib().date(), load_tukar(SHEET_ID))
+idx_off = ab.day_off_idx(k)
+if jadwal == ab.OFF:
+    st.info(f"🛌 Hari ini **day off** Anda (hari {ab.HARI[idx_off]}). Absen tetap bisa dilakukan, "
+            "tetapi rekap akan menandainya sebagai masuk di hari day off.")
+elif jadwal == ab.SAKIT:
+    st.info("🤒 Hari ini tercatat **libur karena sakit** (day off minggu ini sudah dipindah).")
+elif idx_off is not None:
+    st.caption(f"Day off tetap Anda: hari {ab.HARI[idx_off]}.")
+if ab.is_freelance(k):
+    st.caption("Anda staff freelance: clock in / clock out tanpa piket kebersihan.")
+
+# piket kebersihan: wajib sebelum clock out (staff tetap)
+sn = 1
+if aksi == ab.OUT and ab.wajib_piket(k):
+    try:
+        piket_saya = store.piket(nama=k["Nama"], mulai=ab.now_wib().date() - dt.timedelta(days=2))
+    except Exception as e:
+        st.error(f"Data piket tidak bisa dibaca ({type(e).__name__}). Coba lagi.")
+        st.stop()
+    areas = ab.area_piket(k)
+    area_txt = " dan ".join(areas) if areas else "area piket Anda"
+    if ab.piket_selesai(piket_saya, milik):
+        pk = max((p for p in piket_saya), key=lambda p: p["_t"])
+        step(sn, f"Piket kebersihan <span style='font-weight:400;color:#64748B;font-size:.85rem'>"
+                 f"— tercatat {pk['_t']:%H:%M}</span>", True)
+        sn += 1
+    else:
+        step(sn, "Piket kebersihan")
+        st.markdown(f"<div class='piket'>🧹 Sebelum <b>Clock Out</b>, lakukan piket di <b>{html.escape(area_txt)}</b> "
+                    f"lalu foto hasilnya. Wajib tepat <b>{ab.JUMLAH_FOTO_PIKET} foto</b> "
+                    "(foto langsung dari kamera).</div>", unsafe_allow_html=True)
+        fotos_pk = []
+        for i in range(ab.JUMLAH_FOTO_PIKET):
+            f = st.camera_input(f"Foto piket {i + 1} dari {ab.JUMLAH_FOTO_PIKET}",
+                                key=f"pk_{ss.pk_n}_{i}")
+            fotos_pk.append(f)
+            if f is None:
+                break                      # kamera berikutnya baru muncul setelah foto ini diambil
+        lengkap = len(fotos_pk) == ab.JUMLAH_FOTO_PIKET and all(f is not None for f in fotos_pk)
+        if not lengkap:
+            st.caption(f"Foto terambil: {sum(f is not None for f in fotos_pk)} dari "
+                       f"{ab.JUMLAH_FOTO_PIKET}. Clock Out terbuka setelah piket terkirim.")
+        if st.button(f"{'📤' if lengkap else '🔒'} Kirim piket", type="primary", width="stretch",
+                     disabled=not lengkap, key="btn_piket"):
+            with st.spinner("Menyimpan foto piket…"):
+                terbaru = store.piket(nama=k["Nama"], mulai=ab.now_wib().date() - dt.timedelta(days=2))
+                if not ab.piket_selesai(terbaru, store.catatan(nama=k["Nama"])):
+                    store.tambah_piket(nama=k["Nama"], area=", ".join(areas),
+                                       fotos_b64=[ab.kecilkan_foto_piket(f.getvalue())
+                                                  for f in fotos_pk])
+            ss.pk_n += 1
+            ss.flash = "Piket tercatat. Silakan lanjut Clock Out."
+            st.rerun()
+        st.stop()
+
 # lokasi dari browser
 from streamlit_js_eval import streamlit_js_eval  # noqa: E402
 
@@ -337,7 +413,7 @@ else:
                                f"<b>{html.escape(tempat['Nama Lokasi'])}</b>, jarak ± {ab.fmt_m(jarak)} m "
                                f"(batas {ab.fmt_m(tempat['Radius (m)'])} m)</small>{saran}")
 
-step(1, "Lokasi", boleh_lokasi)
+step(sn, "Lokasi", boleh_lokasi)
 st.markdown(f"<div class='card {pesan_lokasi[0]}'>{pesan_lokasi[1]}</div>", unsafe_allow_html=True)
 if not boleh_lokasi and st.button("🔄 Ambil ulang lokasi", width="stretch"):
     ss.geo_n += 1
@@ -347,13 +423,13 @@ ua = streamlit_js_eval(js_expressions="navigator.userAgent", key="ua") or ""
 
 foto = None
 if boleh_lokasi:
-    step(2, "Selfie", False)
+    step(sn + 1, "Selfie", False)
     foto = st.camera_input("Ambil selfie (wajah terlihat jelas)", key=f"cam_{ss.cam_n}",
                            label_visibility="collapsed")
     if foto is None:
         st.caption("Arahkan kamera ke wajah Anda lalu tekan **Take Photo**.")
 else:
-    step(2, "Selfie <span style='font-weight:400;color:#64748B;font-size:.85rem'>"
+    step(sn + 1, "Selfie <span style='font-weight:400;color:#64748B;font-size:.85rem'>"
             "— muncul setelah lokasi sesuai</span>")
 
 siap = boleh_lokasi and foto is not None
@@ -368,6 +444,10 @@ if st.button(f"{'✅' if siap else '🔒'} {ab.LABEL[aksi]} sekarang", type="pri
     with st.spinner("Menyimpan absen…"):
         milik = store.catatan(nama=k["Nama"])           # cek ulang, jangan pakai data lama
         aksi = ab.aksi_berikutnya(milik)
+        if aksi == ab.OUT and ab.wajib_piket(k) and not ab.piket_selesai(
+                store.piket(nama=k["Nama"], mulai=ab.now_wib().date() - dt.timedelta(days=2)), milik):
+            ss.flash = "Piket kebersihan belum tercatat. Selesaikan piket dulu sebelum Clock Out."
+            st.rerun()
         if ab.terlalu_cepat(milik):
             st.warning("Anda baru saja absen kurang dari 1 menit lalu.")
             st.stop()
