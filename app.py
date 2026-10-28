@@ -51,6 +51,10 @@ header[data-testid="stHeader"] *{pointer-events:none;}
 .st-key-akun button{background:transparent !important;border:1px solid rgba(255,255,255,.85) !important;}
 .st-key-akun button p, .st-key-akun button svg{color:#fff !important;}
 @media (max-width: 480px){
+  html{font-size:14px;}
+  .block-container{padding-left:.9rem !important;padding-right:.9rem !important;}
+  .osl-hero .jam{font-size:1.9rem;}
+  .done-box .jam{font-size:2rem;}
   .osl-bar .t{display:none;}
   .st-key-whatsnew button p{font-size:0 !important;}
   .st-key-whatsnew button p::after{margin-left:0 !important;}
@@ -146,9 +150,11 @@ def hero():
                 unsafe_allow_html=True)
 
 
-APP_VERSION = "1.4"
+APP_VERSION = "1.5"
 APP_UPDATED = "28 Okt 2026"
 CHANGELOG = [
+    {"version": "1.5", "date": "28 Okt 2026", "changes": [
+        "Tampilan di HP diperkecil supaya lebih pas di layar."]},
     {"version": "1.4", "date": "28 Okt 2026", "changes": [
         "Piket kebersihan: staff tetap wajib mengirim tepat 3 foto area piketnya sebelum bisa "
         "Clock Out.",
