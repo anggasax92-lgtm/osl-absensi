@@ -312,6 +312,33 @@ def test_riwayat_day_off_berlaku_ke_depan():
     assert ab.rencana_tukar(s.karyawan()[0], dt.date(2026, 10, 28), [])[0] == dt.date(2026, 10, 31)
 
 
+def test_masuk_tanpa_absen():
+    now = t("2026-10-28 10:00")
+    masuk = [{"Nama": "Ayu", "_t": t("2026-10-28 08:00")},     # lalu Clock In 08:05 -> selesai
+             {"Nama": "Ami", "_t": t("2026-10-28 08:10")},     # tidak absen -> tidak selesai
+             {"Nama": "Ami", "_t": t("2026-10-28 09:00")},     # absen jam 09:20 -> selesai
+             {"Nama": "Lukman", "_t": t("2026-10-28 09:50")},  # baru 10 menit -> berjalan
+             {"Nama": "Dani", "_t": t("2026-10-28 08:20")}]    # absen orang lain tidak dihitung
+    cat = [rec("Ayu", "IN", "2026-10-28 08:05"), rec("Ami", "IN", "2026-10-28 09:20"),
+           rec("Ayu", "OUT", "2026-10-28 08:55")]              # Clock Out Ayu bukan milik sesi Dani
+    r = ab.masuk_tanpa_absen(masuk, cat, now)
+    assert [(x["Nama"], x["Waktu"].strftime("%H:%M"), x["Status"]) for x in r] == [
+        ("Lukman", "09:50", "berjalan"), ("Ami", "09:00", "selesai"), ("Dani", "08:20", "tidak selesai"),
+        ("Ami", "08:10", "tidak selesai"), ("Ayu", "08:00", "selesai")]
+    # absen sebelum masuk atau setelah jendela tidak dihitung
+    lewat = [rec("Ami", "IN", "2026-10-28 07:00"), rec("Ami", "IN", "2026-10-28 08:50")]
+    assert ab.masuk_tanpa_absen([masuk[1]], lewat, now)[0]["Status"] == "tidak selesai"
+
+
+def test_store_log_masuk():
+    s = ab.Store(FakeSpreadsheet())
+    assert s.masuk() == []
+    s.tambah_masuk(nama="Ayu", waktu=t("2026-10-27 08:00"))
+    s.tambah_masuk(nama="Ami", waktu=t("2026-10-28 08:00"))
+    assert [m["Nama"] for m in s.masuk()] == ["Ayu", "Ami"]
+    assert [m["Nama"] for m in s.masuk(mulai=dt.date(2026, 10, 28))] == ["Ami"]
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

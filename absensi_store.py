@@ -39,6 +39,9 @@ SHEET_PIKET = "Piket"
 HEAD_PIKET = ["ID", "Waktu", "Tanggal", "Nama", "Area", "Foto 1", "Foto 2", "Foto 3"]
 RANGE_PIKET_TANPA_FOTO = "A:E"
 JUMLAH_FOTO_PIKET = 3        # persis 3 foto per piket
+SHEET_MASUK = "Log_Masuk"
+HEAD_MASUK = ["ID", "Waktu", "Tanggal", "Nama"]
+JENDELA_ABSEN_MENIT = 30     # masuk (PIN benar) tanpa absen selesai dalam waktu ini = tidak selesai
 SHEET_RIWAYAT = "Riwayat_Day_Off"
 HEAD_RIWAYAT = ["Nama", "Mulai Berlaku", "Day Off", "Dicatat Oleh", "Waktu Catat"]
 AWAL_RIWAYAT = "2000-01-01"          # baris dasar: hari day off sebelum perubahan pertama
@@ -282,6 +285,25 @@ def validasi_tukar(k: dict, tgl_sakit: dt.date, tgl_off: dt.date | None, tukar: 
     if tgl_off != rencana:
         return "Day off yang dipindah harus day off minggu yang sama dengan hari sakit."
     return None
+
+
+def masuk_tanpa_absen(masuk: list[dict], catatan: list[dict], now: dt.datetime | None = None,
+                      jendela_menit: int = JENDELA_ABSEN_MENIT) -> list[dict]:
+    """Setiap 'masuk' (nama dipilih + PIN benar) dinilai: sudah absen atau belum.
+
+    Absen dianggap selesai bila orang yang sama punya Clock In/Out dalam `jendela_menit` setelah masuk.
+    Status: 'selesai', 'berjalan' (jendela belum habis) atau 'tidak selesai'. Urut terbaru di atas."""
+    now = now or now_wib()
+    per_nama: dict[str, list[dt.datetime]] = {}
+    for c in catatan:
+        per_nama.setdefault(c["Nama"], []).append(c["_t"])
+    hasil = []
+    for m in sorted(masuk, key=lambda x: x["_t"], reverse=True):
+        batas = m["_t"] + dt.timedelta(minutes=jendela_menit)
+        selesai = any(m["_t"] <= t <= batas for t in per_nama.get(m["Nama"], []))
+        status = "selesai" if selesai else ("berjalan" if now <= batas else "tidak selesai")
+        hasil.append({"Waktu": m["_t"], "Nama": m["Nama"], "Status": status})
+    return hasil
 
 
 def piket_selesai(piket_orang: list[dict], catatan_orang: list[dict]) -> bool:
@@ -648,6 +670,25 @@ class Store:
                 out[r] = [str(x) for x in vr[0] if x]
             except (IndexError, TypeError):
                 pass
+        return out
+
+    # ---- log masuk (PIN benar)
+    def tambah_masuk(self, *, nama: str, waktu: dt.datetime | None = None):
+        t = waktu or now_wib()
+        self.ws(SHEET_MASUK, HEAD_MASUK).append_row(
+            [uuid.uuid4().hex[:10], fmt_waktu(t), t.strftime("%Y-%m-%d"), nama],
+            value_input_option="RAW", insert_data_option="INSERT_ROWS")
+
+    def masuk(self, mulai: dt.date | None = None, sampai: dt.date | None = None) -> list[dict]:
+        out = []
+        for r in _rows_to_dicts(self.ws(SHEET_MASUK, HEAD_MASUK).get_all_values(), HEAD_MASUK):
+            t = parse_waktu(r["Waktu"])
+            if t is None or not str(r["Nama"]).strip():
+                continue
+            if (mulai and t.date() < mulai) or (sampai and t.date() > sampai):
+                continue
+            r["_t"] = t
+            out.append(r)
         return out
 
     # ---- arsip foto lama

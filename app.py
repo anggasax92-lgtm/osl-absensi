@@ -274,6 +274,10 @@ if ss.who is None:
             elif not str(k["PIN"]).strip():
                 st.error("PIN Anda belum dibuat. Minta pengelola mengisinya.")
             elif ab.pin_cocok(pin, k["PIN"]):
+                try:
+                    get_store(SHEET_ID).tambah_masuk(nama=k["Nama"])   # jejak: berhasil masuk
+                except Exception:
+                    pass                                              # log tidak boleh menghalangi absen
                 ss.who, ss.tries = k["Nama"], 0
                 ss.geo_n += 1
                 st.rerun()
