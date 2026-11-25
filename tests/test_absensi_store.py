@@ -339,6 +339,28 @@ def test_store_log_masuk():
     assert [m["Nama"] for m in s.masuk(mulai=dt.date(2026, 10, 28))] == ["Ami"]
 
 
+def test_input_harian_lpg():
+    assert ab.jenis_input({"Nama": "Ami"}) == "Tabung LPG 3Kg"
+    assert ab.jenis_input({"Nama": "Ayu"}) == ""
+    assert ab.parse_qty("5") == 5 and ab.parse_qty(" 0 ") == 0
+    assert ab.parse_qty("2,5") is None and ab.parse_qty("-1") is None and ab.parse_qty("x") is None
+    s = ab.Store(FakeSpreadsheet())
+    assert s.input_harian() == []
+    try:
+        s.tambah_input(nama="Ami", jenis="Tabung LPG 3Kg", qty=-1)
+        assert False
+    except ValueError:
+        pass
+    s.tambah_input(nama="Ami", jenis="Tabung LPG 3Kg", qty=4, waktu=t("2026-11-25 15:00"))
+    s.tambah_input(nama="Ayu", jenis="X", qty=1, waktu=t("2026-11-25 15:00"))
+    ami = s.input_harian(nama="Ami")
+    assert len(ami) == 1 and ami[0]["Qty"] == 4
+    masuk = rec("Ami", ab.IN, "2026-11-25 08:00")
+    assert ab.input_selesai(ami, [masuk], "Tabung LPG 3Kg")
+    assert not ab.input_selesai(ami, [rec("Ami", ab.IN, "2026-11-25 16:00")], "Tabung LPG 3Kg")
+    assert not ab.input_selesai(ami, [masuk], "Lain") and not ab.input_selesai(ami, [], "Tabung LPG 3Kg")
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

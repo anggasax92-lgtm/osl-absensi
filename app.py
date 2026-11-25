@@ -150,9 +150,11 @@ def hero():
                 unsafe_allow_html=True)
 
 
-APP_VERSION = "1.5"
-APP_UPDATED = "28 Okt 2026"
+APP_VERSION = "1.6"
+APP_UPDATED = "25 Nov 2026"
 CHANGELOG = [
+    {"version": "1.6", "date": "25 Nov 2026", "changes": [
+        "Ami wajib mengisi total qty Tabung LPG 3Kg sebelum bisa Clock Out."]},
     {"version": "1.5", "date": "28 Okt 2026", "changes": [
         "Tampilan di HP diperkecil supaya lebih pas di layar."]},
     {"version": "1.4", "date": "28 Okt 2026", "changes": [
@@ -385,6 +387,36 @@ if aksi == ab.OUT and ab.wajib_piket(k):
             st.rerun()
         st.stop()
 
+# isian angka harian (mis. qty tabung LPG): wajib sebelum clock out
+jenis_in = ab.jenis_input(k)
+if aksi == ab.OUT and jenis_in:
+    try:
+        input_saya = store.input_harian(nama=k["Nama"], mulai=ab.now_wib().date() - dt.timedelta(days=2))
+    except Exception as e:
+        st.error(f"Data {jenis_in} tidak bisa dibaca ({type(e).__name__}). Coba lagi.")
+        st.stop()
+    if ab.input_selesai(input_saya, milik, jenis_in):
+        ik = max((p for p in input_saya if p["Jenis"] == jenis_in), key=lambda p: p["_t"])
+        step(sn, f"{html.escape(jenis_in)} <span style='font-weight:400;color:#64748B;font-size:.85rem'>"
+                 f"— tercatat {ik['Qty']} ({ik['_t']:%H:%M})</span>", True)
+        sn += 1
+    else:
+        step(sn, html.escape(jenis_in))
+        st.markdown(f"<div class='piket'>🧯 Sebelum <b>Clock Out</b>, isi <b>jumlah total semua {html.escape(jenis_in)}</b> "
+                    "yang ada hari ini (penuh + kosong).</div>", unsafe_allow_html=True)
+        qty = st.number_input(f"Total qty {jenis_in}", min_value=0, step=1, value=None, format="%d",
+                              key=f"in_{ss.pk_n}", placeholder="mis. 5")
+        if st.button(f"{'📤' if qty is not None else '🔒'} Kirim {jenis_in}", type="primary",
+                     width="stretch", disabled=qty is None, key="btn_input"):
+            with st.spinner("Menyimpan…"):
+                terbaru = store.input_harian(nama=k["Nama"], mulai=ab.now_wib().date() - dt.timedelta(days=2))
+                if not ab.input_selesai(terbaru, store.catatan(nama=k["Nama"]), jenis_in):
+                    store.tambah_input(nama=k["Nama"], jenis=jenis_in, qty=qty)
+            ss.pk_n += 1
+            ss.flash = f"{jenis_in} tercatat. Silakan lanjut Clock Out."
+            st.rerun()
+        st.stop()
+
 # lokasi dari browser
 from streamlit_js_eval import streamlit_js_eval  # noqa: E402
 
@@ -457,6 +489,11 @@ if st.button(f"{'✅' if siap else '🔒'} {ab.LABEL[aksi]} sekarang", type="pri
         if aksi == ab.OUT and ab.wajib_piket(k) and not ab.piket_selesai(
                 store.piket(nama=k["Nama"], mulai=ab.now_wib().date() - dt.timedelta(days=2)), milik):
             ss.flash = "Piket kebersihan belum tercatat. Selesaikan piket dulu sebelum Clock Out."
+            st.rerun()
+        if aksi == ab.OUT and jenis_in and not ab.input_selesai(
+                store.input_harian(nama=k["Nama"], mulai=ab.now_wib().date() - dt.timedelta(days=2)),
+                milik, jenis_in):
+            ss.flash = f"{jenis_in} belum tercatat. Isi dulu sebelum Clock Out."
             st.rerun()
         if ab.terlalu_cepat(milik):
             st.warning("Anda baru saja absen kurang dari 1 menit lalu.")

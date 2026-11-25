@@ -39,6 +39,10 @@ SHEET_PIKET = "Piket"
 HEAD_PIKET = ["ID", "Waktu", "Tanggal", "Nama", "Area", "Foto 1", "Foto 2", "Foto 3"]
 RANGE_PIKET_TANPA_FOTO = "A:E"
 JUMLAH_FOTO_PIKET = 3        # persis 3 foto per piket
+SHEET_INPUT = "Input_Harian"
+HEAD_INPUT = ["ID", "Waktu", "Tanggal", "Nama", "Jenis", "Qty"]
+# Isian angka harian wajib sebelum Clock Out, per karyawan (cocok per nama).
+INPUT_HARIAN = {"ami": "Tabung LPG 3Kg"}
 SHEET_MASUK = "Log_Masuk"
 HEAD_MASUK = ["ID", "Waktu", "Tanggal", "Nama"]
 JENDELA_ABSEN_MENIT = 30     # masuk (PIN benar) tanpa absen selesai dalam waktu ini = tidak selesai
@@ -200,6 +204,29 @@ def area_piket(k: dict) -> list[str]:
 def wajib_piket(k: dict) -> bool:
     """Staff tetap wajib piket sebelum clock out; freelance tidak."""
     return not is_freelance(k)
+
+
+def jenis_input(k: dict) -> str:
+    """Nama isian angka harian yang wajib untuk karyawan ini ('' = tidak ada)."""
+    return INPUT_HARIAN.get(kunci_nama(k.get("Nama")), "")
+
+
+def parse_qty(x) -> int | None:
+    """Bilangan bulat >= 0, atau None bila bukan angka bulat."""
+    try:
+        f = float(str(x).strip().replace(",", "."))
+    except ValueError:
+        return None
+    return int(f) if f >= 0 and f == int(f) else None
+
+
+def input_selesai(input_orang: list[dict], catatan_orang: list[dict], jenis: str) -> bool:
+    """True bila isian `jenis` dicatat SETELAH clock in terakhir (shift yang sedang berjalan)."""
+    masuk = [r["_t"] for r in catatan_orang if r["Jenis"] == IN]
+    if not masuk:
+        return False
+    t_in = max(masuk)
+    return any(p["_t"] >= t_in and p["Jenis"] == jenis for p in input_orang)
 
 
 def _tgl(s) -> dt.date | None:
@@ -670,6 +697,32 @@ class Store:
                 out[r] = [str(x) for x in vr[0] if x]
             except (IndexError, TypeError):
                 pass
+        return out
+
+    # ---- isian angka harian (mis. qty tabung LPG)
+    def tambah_input(self, *, nama: str, jenis: str, qty: int, waktu: dt.datetime | None = None) -> dict:
+        if not isinstance(qty, int) or qty < 0:
+            raise ValueError("Qty harus bilangan bulat >= 0.")
+        t = waktu or now_wib()
+        row = [uuid.uuid4().hex[:10], fmt_waktu(t), t.strftime("%Y-%m-%d"), nama, jenis, qty]
+        self.ws(SHEET_INPUT, HEAD_INPUT).append_row(row, value_input_option="RAW",
+                                                    insert_data_option="INSERT_ROWS")
+        return dict(zip(HEAD_INPUT, row), _t=t)
+
+    def input_harian(self, nama: str | None = None, mulai: dt.date | None = None,
+                     sampai: dt.date | None = None) -> list[dict]:
+        out = []
+        for r in _rows_to_dicts(self.ws(SHEET_INPUT, HEAD_INPUT).get_all_values(), HEAD_INPUT):
+            t = parse_waktu(r["Waktu"])
+            q = parse_qty(r["Qty"])
+            if t is None or q is None:
+                continue
+            if nama is not None and r["Nama"] != nama:
+                continue
+            if (mulai and t.date() < mulai) or (sampai and t.date() > sampai):
+                continue
+            r["_t"], r["Qty"] = t, q
+            out.append(r)
         return out
 
     # ---- log masuk (PIN benar)
