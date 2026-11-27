@@ -150,9 +150,11 @@ def hero():
                 unsafe_allow_html=True)
 
 
-APP_VERSION = "1.6"
-APP_UPDATED = "25 Nov 2026"
+APP_VERSION = "1.7"
+APP_UPDATED = "27 Nov 2026"
 CHANGELOG = [
+    {"version": "1.7", "date": "27 Nov 2026", "changes": [
+        "Qty Tabung LPG 3Kg langsung terkirim dengan satu tap tombol Kirim (tidak perlu tekan Enter)."]},
     {"version": "1.6", "date": "25 Nov 2026", "changes": [
         "Ami wajib mengisi total qty Tabung LPG 3Kg sebelum bisa Clock Out."]},
     {"version": "1.5", "date": "28 Okt 2026", "changes": [
@@ -404,10 +406,16 @@ if aksi == ab.OUT and jenis_in:
         step(sn, html.escape(jenis_in))
         st.markdown(f"<div class='piket'>🧯 Sebelum <b>Clock Out</b>, isi <b>jumlah total semua {html.escape(jenis_in)}</b> "
                     "yang ada hari ini (penuh + kosong).</div>", unsafe_allow_html=True)
-        qty = st.number_input(f"Total qty {jenis_in}", min_value=0, step=1, value=None, format="%d",
-                              key=f"in_{ss.pk_n}", placeholder="mis. 5")
-        if st.button(f"{'📤' if qty is not None else '🔒'} Kirim {jenis_in}", type="primary",
-                     width="stretch", disabled=qty is None, key="btn_input"):
+        # form: angka ikut terkirim saat tombol ditekan. Tanpa form, number_input baru menerima
+        # angka setelah Enter/blur, jadi tap pertama di HP hanya "menerapkan" angka dan tombol
+        # (yang dikunci) tidak bereaksi; staff mengira tidak bisa input.
+        with st.form(f"form_in_{ss.pk_n}", border=False):
+            qty = st.number_input(f"Total qty {jenis_in}", min_value=0, step=1, value=None,
+                                  format="%d", key=f"in_{ss.pk_n}", placeholder="mis. 5")
+            kirim = st.form_submit_button(f"📤 Kirim {jenis_in}", type="primary", width="stretch")
+        if kirim and qty is None:
+            st.error(f"Isi dulu angka total {jenis_in}, lalu tekan Kirim.")
+        elif kirim:
             with st.spinner("Menyimpan…"):
                 terbaru = store.input_harian(nama=k["Nama"], mulai=ab.now_wib().date() - dt.timedelta(days=2))
                 if not ab.input_selesai(terbaru, store.catatan(nama=k["Nama"]), jenis_in):
