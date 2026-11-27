@@ -131,6 +131,17 @@ def load_tukar(sheet_id: str):
         return []          # jadwal day off hanya informasi; absen tidak boleh macet karenanya
 
 
+def _ikon_lpg() -> str:
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "tabung_lpg.png")
+    try:
+        with open(path, "rb") as f:
+            b = base64.b64encode(f.read()).decode()
+    except OSError:
+        return "🔥"
+    return (f"<img src='data:image/png;base64,{b}' width='22' height='22' alt='' "
+            "style='vertical-align:-5px;margin-right:2px'/>")
+
+
 def _logo() -> str:
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "osl_logo.png")
     if not os.path.exists(path):
@@ -154,7 +165,8 @@ APP_VERSION = "1.7"
 APP_UPDATED = "27 Nov 2026"
 CHANGELOG = [
     {"version": "1.7", "date": "27 Nov 2026", "changes": [
-        "Qty Tabung LPG 3Kg langsung terkirim dengan satu tap tombol Kirim (tidak perlu tekan Enter)."]},
+        "Qty Tabung LPG 3Kg langsung terkirim dengan satu tap tombol Kirim (tidak perlu tekan Enter), "
+        "dengan ikon tabung gas 3 kg."]},
     {"version": "1.6", "date": "25 Nov 2026", "changes": [
         "Ami wajib mengisi total qty Tabung LPG 3Kg sebelum bisa Clock Out."]},
     {"version": "1.5", "date": "28 Okt 2026", "changes": [
@@ -404,7 +416,7 @@ if aksi == ab.OUT and jenis_in:
         sn += 1
     else:
         step(sn, html.escape(jenis_in))
-        st.markdown(f"<div class='piket'>🧯 Sebelum <b>Clock Out</b>, isi <b>jumlah total semua {html.escape(jenis_in)}</b> "
+        st.markdown(f"<div class='piket'>{_ikon_lpg()} Sebelum <b>Clock Out</b>, isi <b>jumlah total semua {html.escape(jenis_in)}</b> "
                     "yang ada hari ini (penuh + kosong).</div>", unsafe_allow_html=True)
         # form: angka ikut terkirim saat tombol ditekan. Tanpa form, number_input baru menerima
         # angka setelah Enter/blur, jadi tap pertama di HP hanya "menerapkan" angka dan tombol
