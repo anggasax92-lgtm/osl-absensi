@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import base64
 import datetime as dt
+import hashlib
 import html
 import os
 import time
@@ -112,9 +113,24 @@ def _cfg():
         return "", None, []
 
 
+def _versi_store() -> str:
+    """Sidik isi absensi_store.py. Ikut jadi kunci cache get_store supaya objek Store lama
+    (dari kode sebelum deploy/reload) tidak dipakai lagi; tanpa ini method baru seperti
+    input_harian tidak ada di objek yang tersimpan -> AttributeError."""
+    try:
+        with open(ab.__file__, "rb") as f:
+            return hashlib.sha1(f.read()).hexdigest()
+    except OSError:
+        return str(id(ab.Store))
+
+
 @st.cache_resource(show_spinner=False)
-def get_store(sheet_id: str):
+def _buat_store(sheet_id: str, versi: str):
     return ab.Store(ab.buka_spreadsheet(_cfg()[1], sheet_id))
+
+
+def get_store(sheet_id: str):
+    return _buat_store(sheet_id, _versi_store())
 
 
 @st.cache_data(ttl=60, show_spinner=False)
